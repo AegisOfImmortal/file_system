@@ -17,24 +17,39 @@
 struct SuperBlockInfo
 {
 	char signature[8];
-
-	uint8_t total_blocks_of_disk;
-    uint8_t root_directory_block_index;
-    uint8_t data_block_index;
-    uint8_t number_of_data_blocks;
-    uint4_t number_of_blocks_for_FAT;
+	uint16_t total_blocks_of_disk;
+    uint16_t root_directory_block_index;
+    uint16_t data_block_index;
+    uint16_t number_of_data_blocks;
+    uint8_t number_of_blocks_for_FAT;
 }；
 
 //Root directory
-struct FAT
+struct RootInfo
 {
 	char filename[16];
-	uint16_t size;
-	unit8_t index_of_first_data_block;
+	uint32_t size;
+	uint16_t index_of_first_data_block;
 };
 
-struct SuperBlockInfo superBlockInfo;
+struct FileInfo
+{
+	char * file_name;
+	int offset;
+	int fd;
+};
 
+typedef struct RootInfo* RootInfo_t;
+typedef struct SuperBlockInfo* SuperBlockInfo_t;
+typedef struct FileInfo* FileInfo_t;
+
+struct SuperBlockInfo superBlockInfo;
+struct RootInfo RootDir[]; //TODO: define
+
+typedef enum {
+    READ,
+    WRITE,
+} authority;
 
 int fs_mount(const char *diskname)
 {
