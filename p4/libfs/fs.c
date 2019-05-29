@@ -54,12 +54,6 @@ struct FileDescriptor
     char * filename;
 };
 
-//Read Write permissions
-typedef enum {
-    READ,
-    WRITE,
-} RWpermissions;
-
 //Global Structs
 struct SuperBlock SBbuff;
 SuperBlock_t superblock;
