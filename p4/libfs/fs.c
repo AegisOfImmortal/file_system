@@ -64,6 +64,7 @@ struct SuperBlock SBbuff;
 SuperBlock_t superblock
 struct Entry RootEntry[FS_FILE_MAX_COUNT];
 struct FileDescriptor FDarr[FS_OPEN_MAX_COUNT];
+struct FAT FAT;
 
 
 SuperBlock_t SuperBlockInit() {
@@ -75,6 +76,20 @@ SuperBlock_t SuperBlockInit() {
     SBbuff.number_of_blocks_for_FAT = 0;
     memset(SBbuff.padding, 0, 4079);
     return &SBbuff;
+}
+
+struct Entry * FindEntry(struct Entry * dir, int findamount, const char * filename)
+{
+	if ((dir == NULL) || (filename == NULL)){
+  		return NULL;
+  	}
+	for (int i = 0; i < findamount; i++)
+	{
+  		if (strcmp(FDarr[i].filename, filename) == 0){
+    		return &dir[i];
+  		}
+	}
+	return NULL;
 }
 
 int fs_mount(const char *diskname)
@@ -164,17 +179,84 @@ int fs_info(void)
 
 int fs_create(const char *filename)
 {
-	/* TODO: Phase 2 */
+	// if @filename is invalid, if there is no file named @filename to delete, or if file @filename is currently open
+    if (strlen(filename) > FS_FILENAME_LEN|| filename == NULL || isMounted == 0){
+        return -1;
+    }
+
+    // if a file with the same name already exists on the FS
+    for(int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+        if(strcmp(RootEntry[i].filename, filename) != 0){
+            return -1;
+        }
+    }
+
+    // Create the file
+    for(int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+        if(RootEntry[i].filename[0] == 0) {
+            strcpy(RootEntry[i].filename, filename);
+            RootEntry[i].file_size = 0;
+            RootEntry[i].index_of_first_data_block = FAT_EOC;
+            block_write(superblock->root_directory_block_index, (void*) RootEntry);
+            return 0;
+        }
+    }
+ 
+    // File was not created
+	return -1; 
 }
 
 int fs_delete(const char *filename)
 {
-	/* TODO: Phase 2 */
+    // if @filename is invalid
+    if (strlen(filename) > FS_FILENAME_LEN|| filename == NULL || isMounted == 0){
+        return -1;
+    }
+
+    // Check if file is open
+   	for (int k = 0; k < FS_OPEN_MAX_COUNT; k++) {
+       	if(strcmp(FDarr[k].filename, filename) == 0)
+            return -1;
+    }
+    //Delete the file
+    for(int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+        if(strcmp(root[i].filename, filename) == 0) {
+       		 //Delete table entries
+			uint16_t deleteIndex = entry->firstDataBlock;
+			while(FAT.entries[deleteIndex] != FAT_EOC)
+			{
+  				uint16_t temp = FAT.entries[deleteIndex];
+  				FAT.entries[deleteIndex] = 0;
+  				FATFreeEntry++;
+  				deleteIndex = temp;
+			}
+			FAT.entries[deleteIndex] = 0;
+
+			//Delete Root entries and flush directory
+			RootEntry[i]->filename[0] = 0;
+			RootEntry[i]->file_size = 0;
+			RootEntry[i]->index_of_first_data_block = FAT_EOC;
+			block_write(superblock->root_directory_block_index, (void*)RootEntry);
+			RootFreeEntry++;
+            return 0;
+        }
+    }
+    // Deletion Failed
+	return -1;
 }
 
 int fs_ls(void)
 {
-	/* TODO: Phase 2 */
+    if(isMounted == 0){
+        return -1;
+    }
+    printf("FS Ls:\n");
+    for(int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+        if(root[i].filename[0] != 0) {
+            printf("file: %s, size: %d, data_blk: %d\n", RootEntry[i].filename, RootEntry[i].file_size, RootEntry[i].index_of_first_data_block);
+        }
+    } 
+	return 0;
 }
 
 int fs_open(const char *filename)
