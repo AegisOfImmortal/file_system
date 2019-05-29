@@ -4,7 +4,7 @@ objects := \
 	fs.o   \
 
 CC := gcc
-CFLAGS := -Wall -Werror
+CFLAGS := -Wall
 CFLAGS += -g -O0
 
 all: $(targets)
