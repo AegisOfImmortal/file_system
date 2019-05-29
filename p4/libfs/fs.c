@@ -7,14 +7,17 @@
 #include "disk.h"
 #include "fs.h"
 
-/* TODO: Phase 1 */
+//Global Variables
+int isMounted = 0;
+int RootFreeEntry = 0;
+int FATFreeEntry = 0;
 #define FAT_EOC 0xFFFF
 #define Root_Directory_Size 32
 #define SIGNATURE "ECS150FS"
 #define NULL_STRING "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 //The size of virtual disk blocks is 4096 bytes
 //SuperBlock
-struct SuperBlockInfo
+struct SuperBlock
 {
 	char signature[8];
 	uint16_t total_blocks_of_disk;
@@ -22,65 +25,126 @@ struct SuperBlockInfo
     uint16_t data_block_index;
     uint16_t number_of_data_blocks;
     uint8_t number_of_blocks_for_FAT;
+    uint8_t padding[4079];
 }；
+typedef SuperBlock* SuperBlock_t
 
-//Root directory
-struct RootInfo
+//FAT
+struct FAT
 {
-	char filename[16];
-	uint32_t size;
+	uint16_t * entries;
+};
+
+//Root directory Entry
+struct Entry
+{
+	char filename[FS_FILENAME_LEN];
+	uint32_t file_size;
 	uint16_t index_of_first_data_block;
+	char padding[10];
 };
+typedef Entry* Entry_t
 
-struct FileInfo
+//File Descriptor
+struct FileDescriptor
 {
-	char * file_name;
+	int fileID;
 	int offset;
-	int fd;
+	char * filename;
 };
 
-typedef struct RootInfo* RootInfo_t;
-typedef struct SuperBlockInfo* SuperBlockInfo_t;
-typedef struct FileInfo* FileInfo_t;
-
-struct SuperBlockInfo superBlockInfo;
-struct RootInfo RootDir[]; //TODO: define
-
+//Read Write permissions
 typedef enum {
     READ,
     WRITE,
-} authority;
+} RWpermissions;
+
+//Global Structs
+struct SuperBlock SBbuff;
+SuperBlock_t superblock
+struct Entry RootEntry[FS_FILE_MAX_COUNT];
+struct FileDescriptor FDarr[FS_OPEN_MAX_COUNT];
+
+
+SuperBlock_t SuperBlockInit() {
+    memset(SBbuff.signature, 0, 8);
+    SBbuff.total_blocks_of_disk = 0;
+    SBbuff.root_directory_block_index = 0;
+    SBbuff.data_block_index = 0;
+    SBbuff.number_of_data_blocks = 0;
+    SBbuff.number_of_blocks_for_FAT = 0;
+    memset(SBbuff.padding, 0, 4079);
+    return &SBbuff;
+}
 
 int fs_mount(const char *diskname)
 {
-	
-	/* TODO: Phase 1 */
-	//open the disk 
-	//check @diskname is invalid or not
-	//check if virtual disk file can be opened or not
-	if(block_disk_open(diskname) == -1){
+	//open the disk, check if can be opened 
+	if(block_disk_open(diskname) == -1 || diskname == NULL || isMounted == 1){
 		return -1;
 	}
+
+	//Read the superblock
+	superblock = SuperblockInit();
+	block_read(0, (void*)superblock);
+
+	//the signature of the file system should correspond to the one defined by the specifications
+	if(memcmp(superblock->signature, "ECS150FS", 8) != 0){
+		return -1;
+	}
+
+	//Read the fatblock
+	FAT = (uint16_t*)malloc(superblock->number_of_data_blocks*sizeof(uint16_t));
+	for (int i = 0; i < superblock->root_directory_block_index; i++) {
+        block_read(i, ((void*)FAT) + BLOCK_SIZE*i);
+    }
+    block_read(superblock->root_directory_block_index, (void*)RootFreeEntry);
+
+    //Check free entries
+    for (int i = 0; i < superblock->number_of_data_blocks; i++) {
+        if(FAT[i] == 0) {
+            FATFreeEntry++;
+        }
+    }
+    for (int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+        if(RootEntry[i].filename[0] == 0) {
+            RootFreeEntry++;
+        }
+    }
+
+    //Init File Descriptor Array
+    for (int i = 0; i < FS_OPEN_MAX_COUNT; ++i)
+    {
+    	FDarr[i].filename = (char*)malloc(FS_FILENAME_LEN*sizeof(char));
+    	FDarr[i].fileID = -1;
+    	FDarr[i].offset = -1;
+    }
+
+    isMounted = 1;
 	return 0;
 }
 
 int fs_umount(void)
 {
-	/* TODO: Phase 1 */
-	//check if there is virtual disk file still opens
-	if(check_opening() != -1){
-		return -1;
+	block_write(superblock->root_directory_block_index, (void *)RootEntry);
+
+	//Free File Descriptor Array
+	for (int i = 0; i < FS_OPEN_MAX_COUNT; ++i)
+	{
+		free(FDarr[i].filename);
 	}
+
 	//check if virtual disk file is closed
 	if(block_disk_close() == -1) {
 		return -1;
 	}
+
+	isMounted = 0;
 	return 0;
 }
 
 int fs_info(void)
 {
-	/* TODO: Phase 1 */
 	//check the number of total blocks 
 	if(superBlockInfo.total_blocks_of_disk != block_disk_count()){
 		return -1;
@@ -88,12 +152,13 @@ int fs_info(void)
 
 	//print information about the mounted file system
 	printf("FS Info:\n");
-	printf("total_blk_count=%d\n",(int)superBlockInfo.total_blocks_of_disk);
-	printf("fat_blk_count=%d\n",(int)superBlockInfo.number_of_block_for_FAT);
-	printf("rdirblk_=%d\n",(int)superBlockInfo.root_directory_block_index);
-	printf("data_blk=%d\n",(int)superBlockInfo.data_block_index);
-	printf("data_blk_count=%d\n",(int)superBlockInfo.number_of_data_blocks);
-	printf("fat_free_ratio=%d/%d\n",count_empty_FAT(), (int)superBlockInfo.number_of_data_blocks);
+	printf("total_blk_count=%d\n",(int)superblock->total_blocks_of_disk);
+	printf("fat_blk_count=%d\n",(int)superblock->number_of_block_for_FAT);
+	printf("rdirblk_=%d\n",(int)superblock->root_directory_block_index);
+	printf("data_blk=%d\n",(int)superblock->data_block_index);
+	printf("data_blk_count=%d\n",(int)superblock->number_of_data_blocks);
+	printf("fat_free_ratio=%d/%d\n",FATFreeEntry, (int)superblock->number_of_data_blocks);
+	printf("root_free_raio=%d/%d\n",RootFreeEntry, FS_FILE_MAX_COUNT );
 	return 0;
 }
 
