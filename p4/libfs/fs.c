@@ -15,6 +15,7 @@ int FATFreeEntry = 0;
 #define Root_Directory_Size 32
 #define SIGNATURE "ECS150FS"
 #define NULL_STRING "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+#define INT2VOIDP(i) (void*)(uintptr_t)(i)
 //The size of virtual disk blocks is 4096 bytes
 //SuperBlock
 struct SuperBlock
@@ -113,7 +114,7 @@ int fs_mount(const char *diskname)
     for (int i = 0; i < superblock->root_directory_block_index; i++) {
         block_read(i, ((void*)FAT.entries) + BLOCK_SIZE*i);
     }
-    block_read(superblock->root_directory_block_index, (void*)RootFreeEntry);
+    block_read(superblock->root_directory_block_index, INT2VOIDP(RootFreeEntry));
     
     //Check free entries
     for (int i = 0; i < superblock->number_of_data_blocks; i++) {
