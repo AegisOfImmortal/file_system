@@ -73,20 +73,6 @@ SuperBlock_t SuperblockInit() {
     return &SBbuff;
 }
 
-struct Entry * FindEntry(struct Entry * dir, int findamount, const char * filename)
-{
-    if ((dir == NULL) || (filename == NULL)){
-        return NULL;
-    }
-    for (int i = 0; i < findamount; i++)
-    {
-        if (strcmp(FDarr[i].filename, filename) == 0){
-            return &dir[i];
-        }
-    }
-    return NULL;
-}
-
 int fs_mount(const char *diskname)
 {
     //open the disk, check if can be opened
@@ -99,7 +85,7 @@ int fs_mount(const char *diskname)
     block_read(0, (void*)superblock);
     
     //the signature of the file system should correspond to the one defined by the specifications
-    if(memcmp(superblock->signature, "ECS150FS", 8) != 0){
+    if(memcmp(superblock->signature, SIGNATURE, 8) != 0){
         return -1;
     }
     
